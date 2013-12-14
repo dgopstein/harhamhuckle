@@ -1,14 +1,11 @@
 import requests
 
-hamlet_url = 'http://www.gutenberg.org/cache/epub/1524/pg1524.txt'
-hamlet_page = requests.get(hamlet_url)
-hamlet_text = hamlet_page.text
+def text_from_url(url):
+    return requests.get(url).text
 
-hamlet_start = 290
-hamlet_end = -7
-
-hamlet_lines = hamlet_text.splitlines()[hamlet_start:hamlet_end]
-hamlet_words = [word for line in hamlet_lines for word in line.split()]
+def words_from_text(text, first_line = 0, last_line = -1):
+    lines = text.splitlines()[first_line:last_line]
+    return [word for line in lines for word in line.split()]
 
 def count_words(hamlet_words):
     hamlet_counts = {}
@@ -18,32 +15,53 @@ def count_words(hamlet_words):
         hamlet_counts[word] += 1
     return hamlet_counts
 
-hamlet_counts = count_words(hamlet_words)
-hamlet_total = sum(hamlet_counts.values())
+def features_from_counts(counts):
+    feature_words = ['you', 'thou']
+    return dict([(word, counts[word]) for word in feature_words])
 
-feature_words = ['you', 'thou']
+def normalize_counts(counts):
+    total_count = sum(counts.values())
 
-hamlet_data_tuples = [(word, hamlet_counts[word]) for word in feature_words]
+    counts_copy = {}
+    for k in counts.iterkeys():
+        counts_copy[k] = float(counts[k]) / total_count
 
-hamlet_data = dict(hamlet_data_tuples + [('total', sum([tup[1] for tup in hamlet_data_tuples]))])
+    return counts_copy
+ 
+def distance(features1, features2):
+    normalized1 = normalize_counts(features1)
+    normalized2 = normalize_counts(features2)
 
-old_man_url = 'http://www.classic-enotes.com/american-literature/american-novel/ernest-hemingway/the-old-man-and-the-sea/full-text-of-the-old-man-and-the-sea-by-ernest-hemingway/'
-old_man_page = requests.get(old_man_url)
-old_man_html = old_man_page.text
+    all_keys = normalized1.keys() + normalized2.keys()
+    differences = {}
+    for k in all_keys:
+        differences[k] = normalized2.get(k, 0) - normalized1.get(k, 0)
 
-old_man_lines = old_man_html.splitlines()
-old_man_words = [word for line in old_man_lines for word in line.split()]
-old_man_counts = count_words(old_man_words)
+    distance = sum([abs(diff) for diff in differences.values()])
 
-print old_man_counts
+    return distance
+    
+def extract_features(url, first_line = 0, last_line = -1):
+    text = text_from_url(url)
+    words = words_from_text(text)
+    counts = count_words(words)
+    features = features_from_counts(counts)
+    return features
 
-old_man_data_tuples = [(word, old_man_counts[word]) for word in feature_words]
-old_man_data = dict(old_man_data_tuples + [('total', sum([tup[1] for tup in old_man_data_tuples]))])
+hamlet_features = extract_features('http://www.gutenberg.org/cache/epub/1524/pg1524.txt', first_line = 290, last_line = -7)
+huck_finn_features = extract_features('http://www.gutenberg.org/cache/epub/76/pg76.txt', first_line = 572, last_line = -352)
+old_man_features = extract_features('http://www.gutenberg.ca/ebooks/hemingwaye-oldmanandthesea/hemingwaye-oldmanandthesea-00-t.txt', first_line = 77, last_line = -30)
 
-def thou_to_you(d):
-    return float(d['thou'])/d['you']
+print "old man: %s" % old_man_features
+print "hamlet: %s" % hamlet_features
+print "huck finn: %s" % huck_finn_features
 
-def distance(a, b):
-    a_thou_to_you = thou_to_you(a)
-    b_thou_to_you = thou_to_you(b)
-    return a_thou_to_you-b_thou_to_you
+hamlet_distance = distance(old_man_features, hamlet_features)
+huck_finn_distance = distance(old_man_features, huck_finn_features)
+
+authors = ["Shakespeare", "Twain"]
+if huck_finn_distance < hamlet_distance:
+    authors.reverse()
+
+print
+print "Hemingway's writing is more similar to %s's than %s's" % tuple(authors)
